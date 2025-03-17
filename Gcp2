@@ -1,0 +1,88 @@
+#!/bin/bash
+
+# Capture Harness pipeline variables
+account_id="<+pipeline.variables.account_id>"
+region="<+pipeline.variables.region>"
+resource="<+pipeline.variables.resource>"
+
+echo "*****Show Account*****"
+echo "$account_id"
+echo "******END*****"
+echo "*****Show Region*****"
+echo "$region"
+echo "******END*****"
+
+echo "*****Show resources*****"
+echo "$resource"
+echo "******END*****"
+
+# Ensure resource has data
+if [ -z "$resource" ]; then
+  echo "ERROR: No data in resource variable!"
+  exit 1
+fi
+
+# Extract disk names and other details
+email_content=$(echo "$resource" | \
+  sed -e 's/^{disks:\[\[{//' -e 's/}\]\]}$//' | \
+  sed 's/},{/\n/g' | \
+  grep -v '^[[:space:]]*$' | \
+  awk -F, -v tz="America/New_York" -v account_id="$account_id" '
+    BEGIN {
+      print "<html><head><title>GCP Unattached Persistent Disks</title>"
+      print "<style>"
+      print "body { font-family: Arial, sans-serif; margin: 20px; }"
+      print "h2 { color: blue; font-size: 22px; }"
+      print "table { width: 90%; border-collapse: collapse; margin-top: 20px; border: 2px solid black; }"
+      print "th, td { padding: 12px; border: 2px solid black; text-align: left; font-size: 14px; }"
+      print "th { background-color: #444; color: white; font-size: 16px; font-weight: bold; }"
+      print "tr:nth-child(even) { background-color: #f9f9f9; }"
+      print "tr:hover { background-color: #f1f1f1; }"
+      print ".account-info { font-size: 18px; font-weight: bold; margin-top: 10px; }"
+      print "</style></head><body>"
+
+      print "<h2>GCP Unattached Persistent Disks In Your Project</h2>"
+      print "<p style=\"font-size:14px; color:#555;\">The following Persistent Disks are not attached to any VM instances. Please provide your approval to mark them for deletion in the future:</p>"
+
+      print "<p class=\"account-info\">GCP Account: " account_id "</p>"
+    }
+    {
+      disk_name=""
+      create_time=""
+      owner="N/A"  # Default value
+      tags=""
+
+      for (i=1; i<=NF; i++) {
+        if ($i ~ /name:/) { disk_name=substr($i,index($i,":")+1) }
+        if ($i ~ /creationTimestamp:/) { create_time=substr($i,index($i,":")+1) }
+        if ($i ~ /labels:/) { tags=$i }  # Capture full labels field
+      }
+
+      # Extract Owner directly if available
+      if (match(tags, /Key:Owner,Value:([^}]*)/, owner_match)) {
+        owner = owner_match[1]
+      }
+
+      if (disk_name != "") {
+        cmd="TZ=" tz " date -d \"" create_time "\" +\"%Y-%m-%d %H:%M:%S %Z\""
+        cmd | getline est_time
+        close(cmd)
+
+        rows = rows "<tr>"
+        rows = rows "<td>" disk_name "</td>"
+        rows = rows "<td>" owner "</td>"
+        rows = rows "<td>" est_time "</td></tr>\n"
+      }
+    }
+    END {
+      print "<table border=\"2\">"  # Ensure border is always visible in emails
+      print "<tr><th>Disk Name</th><th>Owner</th><th>Create Time (EST)</th></tr>"
+      print rows
+      print "</table>"
+      print "</body></html>"
+    }
+  '
+)
+
+# Save email content to a file instead of using export
+echo "$email_content" > email.html
