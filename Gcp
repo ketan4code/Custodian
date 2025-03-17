@@ -1,0 +1,80 @@
+#!/bin/bash
+
+# Capture Harness pipeline variables
+project_id="<+pipeline.variables.project_id>"
+region="<+pipeline.variables.region>"
+resource="<+pipeline.variables.resource>"
+
+echo "*****Show Project*****"
+echo "$project_id"
+echo "******END*****"
+echo "*****Show Region*****"
+echo "$region"
+echo "******END*****"
+
+echo "*****Show resources*****"
+echo "$resource"
+echo "******END*****"
+
+# The resource is not strictly valid JSON. We attempt to convert it into valid JSON.
+# Variables
+
+email_content=$(echo "$resource" | \
+  sed -e 's/^{disks:\[\[{//' -e 's/}\]\]}$//' | \
+  sed 's/},{/\n/g' | \
+  grep -v '^[[:space:]]*$' | \
+  awk -F, -v tz="America/New_York" -v project_id="$project_id" '
+    BEGIN {
+      print "<html><head><title>GCP Unattached Disks</title>"
+      print "<style>"
+      print "body { font-family: Arial, sans-serif; margin: 20px; }"
+      print "h2 { color: blue; font-size: 22px; }"
+      print "table { width: 90%; border-collapse: collapse; margin-top: 20px; border: 2px solid black; }"
+      print "th, td { padding: 12px; border: 2px solid black; text-align: left; font-size: 14px; }"
+      print "th { background-color: #444; color: white; font-size: 16px; font-weight: bold; }"
+      print "tr:nth-child(even) { background-color: #f9f9f9; }"
+      print "tr:hover { background-color: #f1f1f1; }"
+      print ".account-info { font-size: 18px; font-weight: bold; margin-top: 10px; }"
+      print "</style></head><body>"
+
+      print "<h2>GCP Unattached Disks In Your Project</h2>"
+      print "<p style=\"font-size:14px; color:#555;\">The following GCP disks are not attached to any instances. Please review them:</p>"
+
+      print "<p class=\"account-info\">GCP Project: " project_id "</p>"
+    }
+    {
+      disk_id=""
+      create_time=""
+      zone="N/A"  # Default value
+      size_gb=""
+
+      for (i=1; i<=NF; i++) {
+        if ($i ~ /name:/) { disk_id=substr($i,index($i,":")+1) }
+        if ($i ~ /creationTimestamp:/) { create_time=substr($i,index($i,":")+1) }
+        if ($i ~ /zone:/) { zone=substr($i,index($i,":")+1) }
+        if ($i ~ /sizeGb:/) { size_gb=substr($i,index($i,":")+1) }
+      }
+
+      if (disk_id != "") {
+        cmd="TZ=" tz " date -d \"" create_time "\" +\"%Y-%m-%d %H:%M:%S %Z\""
+        cmd | getline est_time
+        close(cmd)
+
+        rows = rows "<tr>"
+        rows = rows "<td>" disk_id "</td>"
+        rows = rows "<td>" zone "</td>"
+        rows = rows "<td>" size_gb " GB</td>"
+        rows = rows "<td>" est_time "</td></tr>\n"
+      }
+    }
+    END {
+      print "<table border=\"2\">"  # Ensure border is always visible in emails
+      print "<tr><th>Disk ID</th><th>Zone</th><th>Size (GB)</th><th>Creation Time (EST)</th></tr>"
+      print rows
+      print "</table>"
+      print "</body></html>"
+    }
+  '
+)
+
+export $email_content
