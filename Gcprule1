@@ -1,0 +1,17 @@
+- name: list-unattached-disks
+  resource: gcp.disk
+  filters:
+    - type: value
+      key: users
+      value: empty
+  actions:
+    - type: webhook
+      url: https://app3.harness.io/gateway/pipeline/api/webhook/custom/D9HPYtybR8
+      batch: true
+      body:
+        project: resource.project_id  # Extract project ID dynamically
+        disks:
+          - name: resource.name
+            sizeGb: resource.sizeGb
+            zone: resource.zone
+            creationTimestamp: resource.creationTimestamp
