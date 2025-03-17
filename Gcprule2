@@ -1,0 +1,18 @@
+policies:
+  - name: list-unattached-disks
+    resource: gcp.disk
+    filters:
+      - type: value
+        key: users
+        value: empty
+    actions:
+      - type: webhook
+        url: https://your-webhook-url
+        batch: true
+        body:
+          project_id: "{{ account_id }}"
+          disks:
+            - name: "{{ resource.name }}"
+              sizeGb: "{{ resource.sizeGb }}"
+              zone: "{{ resource.zone }}"
+              creationTimestamp: "{{ resource.creationTimestamp }}"
