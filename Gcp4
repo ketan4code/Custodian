@@ -1,0 +1,7 @@
+Hello,
+
+I am working on a Harness CI pipeline that includes multiple steps. In one of the steps, an API call is made to an Asset Governance rule, but it is failing with a 401 error. I have attached a screenshot of the error below.
+
+For authentication, I am using a service account API token, and the service account has the Harness Admin role. Despite this, the request is still unauthorized.
+
+Could you please help us troubleshoot this issue?
